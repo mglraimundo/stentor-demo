@@ -439,9 +439,9 @@
 
                 freqs.forEach(function(freq, i) {
                     var t = now + i * spacing;
-                    playBellPartial(freq,        0.22, t, decay);        // fundamental
-                    playBellPartial(freq * 2,    0.07, t, decay * 0.55); // octave partial
-                    playBellPartial(freq * 2.76, 0.05, t, decay * 0.35); // inharmonic bell partial
+                    playBellPartial(freq,        0.44, t, decay);        // fundamental
+                    playBellPartial(freq * 2,    0.14, t, decay * 0.55); // octave partial
+                    playBellPartial(freq * 2.76, 0.10, t, decay * 0.35); // inharmonic bell partial
                 });
 
                 var total = spacing * (freqs.length - 1) + decay;
@@ -467,7 +467,10 @@
                 await new Promise(function(resolve) {
                     var source = audioCtx.createBufferSource();
                     source.buffer = audioBuffer;
-                    source.connect(audioCtx.destination);
+                    var voiceGain = audioCtx.createGain();
+                    voiceGain.gain.value = 2.0;
+                    source.connect(voiceGain);
+                    voiceGain.connect(audioCtx.destination);
                     source.onended = resolve;
                     source.start();
                 });
