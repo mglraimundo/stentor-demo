@@ -453,34 +453,51 @@
         async function processQueue() {
             if (isPlaying || playQueue.length === 0) return;
             isPlaying = true;
-            
+
             setStatus("playing", "A reproduzir áudio...");
             var blob = playQueue.shift();
 
             await playChime();
 
-            var audioUrl = URL.createObjectURL(blob);
-            var audio = new Audio(audioUrl);
-            
-            audio.onended = function() {
-                URL.revokeObjectURL(audioUrl);
-                isPlaying = false;
-                
-                if (!isRecording && playQueue.length === 0) {
-                    setStatus("ready", "Pronto");
-                } else if (!isRecording && playQueue.length > 0) {
-                    setStatus("ready", "Na fila (" + playQueue.length + ")");
-                }
-                
-                // Add a small 2-second gap between queue items, like the real server
-                setTimeout(processQueue, 2000);
-            };
-            
-            audio.play().catch(function(e) {
-                console.error("Playback failed", e);
-                isPlaying = false;
-                processQueue();
-            });
+            try {
+                // Use AudioContext for playback — avoids iOS autoplay restrictions
+                // and unreliable HTMLAudioElement.onended on blob URLs
+                var arrayBuffer = await blob.arrayBuffer();
+                var audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+                await new Promise(function(resolve) {
+                    var source = audioCtx.createBufferSource();
+                    source.buffer = audioBuffer;
+                    source.connect(audioCtx.destination);
+                    source.onended = resolve;
+                    source.start();
+                });
+            } catch (e) {
+                console.warn("AudioContext playback failed, falling back to Audio element", e);
+                var audioUrl = URL.createObjectURL(blob);
+                await new Promise(function(resolve) {
+                    var audio = new Audio(audioUrl);
+                    var done = false;
+                    function finish() {
+                        if (done) return;
+                        done = true;
+                        URL.revokeObjectURL(audioUrl);
+                        resolve();
+                    }
+                    audio.onended = finish;
+                    audio.onerror = finish;
+                    audio.play().catch(finish);
+                });
+            }
+
+            isPlaying = false;
+
+            if (!isRecording && playQueue.length === 0) {
+                setStatus("ready", "Pronto");
+            } else if (!isRecording && playQueue.length > 0) {
+                setStatus("ready", "Na fila (" + playQueue.length + ")");
+            }
+
+            setTimeout(processQueue, 2000);
         }
 
         // --- UI helpers ---
